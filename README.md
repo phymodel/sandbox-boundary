@@ -1,37 +1,39 @@
 # Sandbox Boundary
 
-定义 Agent 在 ChatStudio 工作区中的**安全边界规则**，防止 Agent 误修改构建产物或打包文件。
+ChatStudio rule — **edit source, never generated output**.
 
-## 为什么需要沙箱边界
+## Why
 
-ChatStudio 项目包含多个看似相同的目录，但只有部分目录是真正的源码：
+The studio repo holds directories that look interchangeable but are not: hand-written source, a
+gitignored staging tree that the packer rebuilds from scratch, and the installed `.app`. An edit in
+the second or third is silently overwritten by the next pack — and can leave the running app
+executing code that matches neither the signed bundle nor the source tree.
 
-| 目录 | 类型 | 说明 |
-|------|------|------|
-| `web_editor/backend/` | ✅ 源码 | 后端代码的唯一修改入口 |
-| `web_editor/frontend/src/` | ✅ 源码 | 前端代码的唯一修改入口 |
-| `web_editor/frontend/build-resources/backend/` | ❌ 构建暂存区 | 由 `pack-electron.sh` 从源码自动生成，**不可直接修改** |
-| `/Applications/ChatStudio.app/` | ❌ 打包产物 | macOS 安装的应用包，**不可修改** |
+## Layout
 
-如果在构建暂存区或打包产物中直接修改代码，变更会在下次打包时被**静默覆盖**，甚至导致运行中的应用崩溃。
+| Path | Kind |
+|---|---|
+| `app/backend/` | ✅ source — backend (Python) |
+| `app/frontend/src/` | ✅ source — web UI (TypeScript) |
+| `app/electron/` | ✅ source — desktop shell (own npm project) |
+| `app/frontend/dist/` | ❌ generated — web build output |
+| `app/build/**` | ❌ generated — staging tree + `.app` / `.dmg` |
+| `/Applications/ChatStudio.app` | ❌ generated — installed bundle |
 
-## 规则文件
-
-- `RULE.md` — 沙箱边界规则（必读），ChatStudio Agent 在每次对话中自动加载
-
-## 正确的工作流
+## Correct loop
 
 ```bash
-# 1. 修改源码
-#    → 后端：编辑 web_editor/backend/
-#    → 前端：编辑 web_editor/frontend/src/
-
-# 2. 构建前端
-cd web_editor/frontend && npm run build
-
-# 3. 打包
-./run_pack_electron.command
-
-# 4. 测试
-open web_editor/frontend/release/*.app
+cd app && ./pack-electron.sh --fast   # non-interactive; --fast skips the .dmg
+open app/build/release/ChatStudio.app
 ```
+
+The packer runs the web build for you (`app/electron` → `pack:dir` →
+`npm --prefix ../frontend run web:build`). To build the web UI alone:
+`cd app/frontend && npm run web:build` — note there is no `npm run build` script.
+
+Humans can double-click `./run_pack_electron.command` instead; it wraps `pack-electron.sh` and
+waits for Enter before closing.
+
+## Rule file
+
+[RULE.md](./RULE.md) — the always-on rule ChatStudio injects into every turn.
