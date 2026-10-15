@@ -1,36 +1,29 @@
 ---
 name: Sandbox boundary
-description: Edit source only — app/backend, app/frontend/src, app/electron; never generated output (app/frontend/dist, app/build/**, /Applications/ChatStudio.app).
+description: Studio repo — the packer's output (app/frontend/dist, app/build/**, the installed .app) is generated and must never be edited; everything hand-written is source.
 always: true
 ---
 
-# Sandbox boundary (mandatory)
+# Edit source, never generated output
 
-Applies to the **ChatStudio studio repo** (the checkout that holds `run_pack_electron.command`).
-In any other project, apply the same split: hand-written source vs. generated output.
+In the **ChatStudio studio repo** the generated set is closed — anything hand-written outside it is
+source and may be edited.
 
-## Source — the only places code may be edited
+- ❌ `app/frontend/dist/` — web build output
+- ❌ `app/build/**` — packer staging tree + `.app` / `.dmg`; gitignored, rebuilt from scratch
+- ❌ the installed bundle (`/Applications/ChatStudio.app` on macOS)
 
-- `app/backend/` — backend (Python)
-- `app/frontend/src/` — web UI (TypeScript)
-- `app/electron/` — desktop shell (`main.cjs` / `preload.cjs` / `backendProcess.cjs`, its own npm project)
-
-## Generated — never edit (your change is silently overwritten)
-
-- `app/frontend/dist/` — web build output of `npm run web:build`
-- `app/build/**` — the packer's staging tree (bundled Python runtime, backend venv + backend copy)
-  and the `.app` / `.dmg`; gitignored, and rebuilt from scratch on every pack
-- `/Applications/ChatStudio.app` — the installed bundle
-
-## Build & test loop
+Editing there is silently overwritten, and can leave the app running code that matches neither the
+source tree nor the signed bundle. Verify a path with `git check-ignore -v <path>`. The same split —
+hand-written vs. generated — applies to any other project.
 
 ```bash
-cd app && ./pack-electron.sh --fast      # stage runtime + backend, build web UI, package the .app
+cd app && ./pack-electron.sh --fast      # stages runtime + backend, builds the web UI, packages the .app
 open app/build/release/ChatStudio.app    # artifacts live under app/build/release/
 ```
 
-- The packer builds the web UI itself (`app/electron` → `pack:dir` chains
-  `npm --prefix ../frontend run web:build`) — do not build the frontend by hand first.
-- Web UI only, no packaging: `cd app/frontend && npm run web:build`. There is **no** `npm run build`.
-- `./run_pack_electron.command` is the double-click entry point and is interactive (it waits for
-  Enter to close), so from a shell or an agent use `cd app && ./pack-electron.sh` instead.
+- The packer builds the web UI itself (`app/electron` → `pack:dir` →
+  `npm --prefix ../frontend run web:build`) — don't build the frontend first.
+- Web UI only: `cd app/frontend && npm run web:build`. There is **no** `npm run build`.
+- `./run_pack_electron.command` is the interactive double-click entry; from a shell or an agent use
+  `cd app && ./pack-electron.sh`.
